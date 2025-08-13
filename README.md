@@ -53,7 +53,7 @@ gymnasium[box2d]  # For BipedalWalker environments
 2. **Install dependencies:**
    ```bash
    pip install gymnasium torch numpy tensorboard tyro
-   pip install gymnasium[box2d]  # For bipedal walker environments
+   pip install box2d  # For bipedal walker environments
    ```
 
 ## 🎮 Usage
@@ -62,14 +62,14 @@ gymnasium[box2d]  # For BipedalWalker environments
 
 Train a bipedal walker agent with default settings:
 ```bash
-python ppo.py --env-id BipedalWalker-v3
+python ppo_continuous_action_original.py --env-id BipedalWalker-v3
 ```
 
 ### Advanced Configuration
 
 Train with custom hyperparameters:
 ```bash
-python ppo.py \
+python ppo_continuous_action_original.py \
     --env-id BipedalWalker-v3 \
     --total-timesteps 2000000 \
     --learning-rate 3e-4 \
@@ -200,3 +200,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Happy Training! 🤖🚶‍♂️**
+
