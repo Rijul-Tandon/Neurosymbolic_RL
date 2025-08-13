@@ -52,7 +52,7 @@ gymnasium[box2d]  # For BipedalWalker environments
 
 2. **Install dependencies:**
    ```bash
-   pip install gymnasium torch numpy tensorboard tyro
+   pip install requirements.txt
    pip install box2d  # For bipedal walker environments
    ```
 
@@ -200,4 +200,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Happy Training! 🤖🚶‍♂️**
+
 
