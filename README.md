@@ -52,7 +52,7 @@ gymnasium[box2d]  # For BipedalWalker environments
 
 2. **Install dependencies:**
    ```bash
-   pip install requirements.txt
+   pip install -r requirements.txt
    pip install box2d  # For bipedal walker environments
    ```
 
@@ -200,5 +200,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Happy Training! 🤖🚶‍♂️**
+
 
 
