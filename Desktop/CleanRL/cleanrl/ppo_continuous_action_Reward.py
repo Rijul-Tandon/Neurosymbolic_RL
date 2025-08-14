@@ -142,62 +142,19 @@ class Agent(nn.Module):
 
 
 # Define the rule-based policy for BipedalWalker-v3
-# This is a simple handcrafted symbolic policy to assist learning
-# Rules focus on balance (keep hull angle near 0), forward motion, and leg alternation
-# Actions: [hip1_torque, knee1_torque, hip2_torque, knee2_torque]
+# This is a simple handcrafted symbolic policy to assist learning via reward shaping
+# Focuses on providing bonuses for desirable states and penalties for undesirable states
 class RulePolicy:
     def __init__(self):
         pass  # No initialization needed for simple rules
 
-    def get_action(self, state):
-        # Extract relevant state components (assuming state is numpy array)
-        state = np.squeeze(state)  # Handle potential extra dimensions
-        hull_angle = state[0]
-        hull_ang_vel = state[1]
-        horiz_speed = state[2]
-        hip1_angle = state[4]
-        knee1_angle = state[6] - 1.0  # Knee angles are offset by +1 in state
-        contact1 = state[8]
-        hip2_angle = state[9]
-        knee2_angle = state[11] - 1.0
-        contact2 = state[13]
-
-        action = np.zeros(4)
-
-        # Rule 1: Balance correction using PD-like control on hull angle
-        action[0] = -1.5 * hull_angle - 0.5 * hull_ang_vel  # Hip1 torque
-        action[2] = 1.5 * hull_angle + 0.5 * hull_ang_vel   # Hip2 torque
-
-        # Rule 2: Encourage forward speed
-        target_speed = 2.0
-        speed_error = target_speed - horiz_speed
-        action[0] += 0.2 * speed_error
-        action[2] += 0.2 * speed_error
-
-        # Rule 3: Leg cycling based on contact (simulate walking gait)
-        if contact1 > 0.5:  # Leg1 in contact: push back (bend knee, push hip)
-            action[1] = -1.0 * (knee1_angle + 0.5)
-            action[0] += 0.5
-        else:  # Leg1 swinging: extend knee, swing hip back
-            action[1] = 0.5 * (-knee1_angle)
-            action[0] -= 0.5
-
-        if contact2 > 0.5:  # Leg2 in contact
-            action[3] = -1.0 * (knee2_angle + 0.5)
-            action[2] += 0.5
-        else:  # Leg2 swinging
-            action[3] = 0.5 * (-knee2_angle)
-            action[2] -= 0.5
-
-        # Clip actions to valid range [-1, 1]
-        action = np.clip(action, -1, 1)
-        return action
-
-    def get_reward_bonus(self, state, action=None):
+    def get_reward_bonus(self, state):
         # Compute symbolic rule-based reward shaping bonus
         # Bonuses for good states: balance, speed, stability, alternating contacts
+        # Penalties for bad states: imbalance, backward movement, instability, poor gait
         state = np.squeeze(state)
         hull_angle = state[0]
+        hull_ang_vel = state[1]
         horiz_speed = state[2]
         vert_speed = state[3]
         contact1 = state[8]
@@ -205,27 +162,33 @@ class RulePolicy:
 
         bonus = 0.0
 
-        # Rule 1: Bonus for balanced hull
+        # Rule 1: Balance - bonus for balanced hull, penalty for imbalance
         if abs(hull_angle) < 0.1:
             bonus += 0.1
+        else:
+            bonus -= 0.05 * abs(hull_angle)
 
-        # Rule 2: Bonus for forward speed
+        # Penalty for high hull angular velocity
+        bonus -= 0.03 * abs(hull_ang_vel)
+
+        # Rule 2: Forward speed - bonus for forward movement, penalty for backward
         if horiz_speed > 1.0:
             bonus += 0.05 * horiz_speed
+        elif horiz_speed < 0:
+            bonus += 0.05 * horiz_speed  # This will be negative, acting as a penalty
 
-        # Rule 3: Penalty for high vertical speed (instability)
+        # Rule 3: Stability - bonus for low vertical speed, penalty for high
         if abs(vert_speed) < 0.5:
             bonus += 0.05
+        else:
+            bonus -= 0.03 * abs(vert_speed)
 
-        # Rule 4: Bonus for alternating leg contacts (proper gait)
-        if contact1 + contact2 == 1.0:
+        # Rule 4: Gait - bonus for alternating leg contacts, penalty for non-alternating
+        contacts_sum = contact1 + contact2
+        if contacts_sum == 1.0:
             bonus += 0.1
-
-        # Optional: Penalty if action deviates from rule action
-        if action is not None:
-            rule_action = self.get_action(state)
-            dist = np.linalg.norm(action - rule_action)
-            bonus -= 0.01 * dist
+        else:
+            bonus -= 0.05
 
         return bonus
 
@@ -309,16 +272,16 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
+            next_obs_np, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
             next_done = np.logical_or(terminations, truncations)
 
             # Compute rule-based reward bonus and shape the reward
             # This integrates the symbolic rule policy to provide denser rewards for faster convergence
-            rule_bonus = rule_policy.get_reward_bonus(next_obs, action.cpu().numpy())
+            rule_bonus = rule_policy.get_reward_bonus(next_obs_np)
             shaped_reward = reward + rule_bonus  # Add bonus to original reward
 
             rewards[step] = torch.tensor(shaped_reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
+            next_obs, next_done = torch.Tensor(next_obs_np).to(device), torch.Tensor(next_done).to(device)
 
             if "final_info" in infos:
                 for info in infos["final_info"]:
