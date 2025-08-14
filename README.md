@@ -46,12 +46,16 @@ gymnasium[box2d]  # For BipedalWalker environments
 
 1. **Clone the repository:**
    ```bash
+   # Clone the CleanRL repository for utils and RL implementation
+   git clone https://github.com/vwxyzjn/cleanrl.git
+   # Clone Neurosymbolic RL and add them at path  CLeanRL/cleanrl along with all RL algorithm implementations
    git clone https://github.com/Rijul-Tandon/Neurosymbolic_RL.git
    cd Neurosymbolic_RL
    ```
 
 2. **Install dependencies:**
    ```bash
+   remove the line 3 from requirements. 
    pip install -r requirements.txt
    pip install box2d  # For bipedal walker environments
    ```
@@ -200,6 +204,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Happy Training! 🤖🚶‍♂️**
+
 
 
 
