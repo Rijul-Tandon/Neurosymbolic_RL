@@ -162,33 +162,36 @@ class RulePolicy:
 
         bonus = 0.0
 
-        # Rule 1: Balance - bonus for balanced hull, penalty for imbalance
-        if abs(hull_angle) < 0.1:
-            bonus += 0.1
-        else:
-            bonus -= 0.05 * abs(hull_angle)
+        # Optimized Rule 1: Continuous balance reward with angular velocity consideration
+        balance_bonus = max(0, 1 - 2 * abs(hull_angle))  # Max 1 when upright, scales with angle
+        balance_bonus *= (1 - 0.2 * abs(hull_ang_vel))   # Reduce if rotating quickly
+        bonus += 0.6 * balance_bonus
 
-        # Penalty for high hull angular velocity
-        bonus -= 0.03 * abs(hull_ang_vel)
+        # Optimized Rule 2: Progressive speed reward with moving average
+        if horiz_speed > 0:
+            # Scale reward with speed, but diminish returns at higher speeds
+            speed_bonus = min(horiz_speed * 0.8, 0.5)  # Cap speed bonus
+            bonus += speed_bonus
+        
+        # Optimized Rule 3: Stability reward with vertical velocity control
+        vert_stability = max(0, 1 - 10 * abs(vert_speed))
+        bonus += 0.3 * vert_stability
 
-        # Rule 2: Forward speed - bonus for forward movement, penalty for backward
-        if horiz_speed > 1.0:
-            bonus += 0.05 * horiz_speed
-        elif horiz_speed < 0:
-            bonus += 0.05 * horiz_speed  # This will be negative, acting as a penalty
-
-        # Rule 3: Stability - bonus for low vertical speed, penalty for high
-        if abs(vert_speed) < 0.5:
-            bonus += 0.05
-        else:
-            bonus -= 0.03 * abs(vert_speed)
-
-        # Rule 4: Gait - bonus for alternating leg contacts, penalty for non-alternating
+        # Optimized Rule 4: Advanced gait reward with contact pattern analysis
         contacts_sum = contact1 + contact2
         if contacts_sum == 1.0:
-            bonus += 0.1
-        else:
-            bonus -= 0.05
+            # Additional reward for proper alternating gait
+            gait_bonus = 0.4 * (1 + horiz_speed)  # Scale with forward progress
+            bonus += gait_bonus
+        elif contacts_sum == 0.0:
+            # Small penalty for both legs off ground
+            bonus -= 0.1
+
+        # New Rule 5: Energy efficiency penalty (encourage minimal effort)
+        # Assuming torque information is available in state[6:8] and [11:13]
+        torque_penalty = 0.0001 * (abs(state[6]) + abs(state[7]) + abs(state[11]) + abs(state[12]))
+        bonus -= torque_penalty
+
 
         return bonus
 
