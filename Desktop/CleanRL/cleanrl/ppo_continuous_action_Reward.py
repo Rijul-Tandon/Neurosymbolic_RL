@@ -1,8 +1,10 @@
+
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_continuous_actionpy
 import os
 import random
 import time
 from dataclasses import dataclass
+import sys
 
 import gymnasium as gym
 import numpy as np
@@ -153,6 +155,27 @@ class RulePolicy:
         # Bonuses for good states: balance, speed, stability, alternating contacts
         # Penalties for bad states: imbalance, backward movement, instability, poor gait
         state = np.squeeze(state)
+        
+        # Log state information
+        state_info = (
+            f"CURRENT STATE "
+            f"hull_angle: {state[0]:.4f} "
+            f"hull_ang_vel: {state[1]:.4f} "
+            f"horiz_speed: {state[2]:.4f} "
+            f"vert_speed: {state[3]:.4f} "
+            f"horiz_vel: {state[4]:.4f} "
+            f"vert_vel: {state[5]:.4f} "
+            f"torque1: {state[6]:.4f} "
+            f"torque2: {state[7]:.4f} "
+            f"contact1: {state[8]:.4f} "
+            f"contact2: {state[9]:.4f} "
+            f"contact3: {state[10]:.4f} "
+            f"contact4: {state[11]:.4f} "
+            f"contact5: {state[12]:.4f} "
+            f"contact6: {state[13]:.4f}"
+        )
+        print(state_info)
+
         hull_angle = state[0]
         hull_ang_vel = state[1]
         horiz_speed = state[2]
@@ -165,43 +188,56 @@ class RulePolicy:
         # Optimized Rule 1: Continuous balance reward with angular velocity consideration
         balance_bonus = max(0, 1 - 2 * abs(hull_angle))  # Max 1 when upright, scales with angle
         balance_bonus *= (1 - 0.2 * abs(hull_ang_vel))   # Reduce if rotating quickly
-        bonus += 0.6 * balance_bonus
+        bonus += 0.006 * balance_bonus
+        print(f"balance_bonus {balance_bonus:.6f}")
 
         # Optimized Rule 2: Progressive speed reward with moving average
         if horiz_speed > 0:
             # Scale reward with speed, but diminish returns at higher speeds
-            speed_bonus = min(horiz_speed * 0.8, 0.5)  # Cap speed bonus
+            speed_bonus = min(horiz_speed * 0.008, 0.001)  # Cap speed bonus
+            print(f"speed_bonus {speed_bonus:.6f}")
             bonus += speed_bonus
         
-        # Optimized Rule 3: Stability reward with vertical velocity control
-        vert_stability = max(0, 1 - 10 * abs(vert_speed))
-        bonus += 0.3 * vert_stability
-
-        # Optimized Rule 4: Advanced gait reward with contact pattern analysis
-        contacts_sum = contact1 + contact2
-        if contacts_sum == 1.0:
-            # Additional reward for proper alternating gait
-            gait_bonus = 0.4 * (1 + horiz_speed)  # Scale with forward progress
-            bonus += gait_bonus
-        elif contacts_sum == 0.0:
-            # Small penalty for both legs off ground
-            bonus -= 0.1
-
         # New Rule 5: Energy efficiency penalty (encourage minimal effort)
         # Assuming torque information is available in state[6:8] and [11:13]
-        torque_penalty = 0.0001 * (abs(state[6]) + abs(state[7]) + abs(state[11]) + abs(state[12]))
+        torque_penalty = 0.001 * (abs(state[6]) + abs(state[7]) + abs(state[11]) + abs(state[12]))
         bonus -= torque_penalty
-
+        print(f"torque_penalty {torque_penalty:.6f}")
 
         return bonus
 
 
+class Logger:
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log = open(filename, "w")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()  # Ensure immediate writing to file
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+
 if __name__ == "__main__":
+    # Set up logging to file
+    logger = Logger("ppo_continuous_reward.txt")
+    sys.stdout = logger
+    
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    
+    print(f"Starting experiment: {run_name}")
+    print("Hyperparameters:")
+    for key, value in vars(args).items():
+        print(f"  {key}: {value}")
+    
     if args.track:
         import wandb
 
@@ -276,6 +312,7 @@ if __name__ == "__main__":
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs_np, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
+            print(f"reward {reward[0]:.6f}")
             next_done = np.logical_or(terminations, truncations)
 
             # Compute rule-based reward bonus and shape the reward
@@ -384,8 +421,9 @@ if __name__ == "__main__":
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        sps = int(global_step / (time.time() - start_time))
+        print(f"SPS: {sps}")
+        writer.add_scalar("charts/SPS", sps, global_step)
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
@@ -415,3 +453,8 @@ if __name__ == "__main__":
 
     envs.close()
     writer.close()
+    
+    # Restore standard output
+    sys.stdout = logger.terminal
+    logger.log.close()
+    print("Training completed. All outputs logged to ppo_continuous_reward.txt")
